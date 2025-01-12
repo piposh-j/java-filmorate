@@ -2,10 +2,12 @@ package ru.yandex.practicum.filmorate.controller;
 
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import ru.yandex.practicum.filmorate.exception.NotFoundException;
 import ru.yandex.practicum.filmorate.exception.ValidationException;
 import ru.yandex.practicum.filmorate.model.Film;
+import ru.yandex.practicum.filmorate.model.Marker;
 
 import java.time.LocalDate;
 import java.util.Collection;
@@ -14,6 +16,7 @@ import java.util.Map;
 
 
 @Slf4j
+@Validated
 @RestController
 @RequestMapping("/films")
 public class FilmController {
@@ -26,6 +29,7 @@ public class FilmController {
         return films.values();
     }
 
+    @Validated(Marker.Create.class)
     @PostMapping
     public Film create(@Valid @RequestBody Film film) {
         validationFilm(film);
@@ -34,6 +38,7 @@ public class FilmController {
         return film;
     }
 
+    @Validated(Marker.Update.class)
     @PutMapping
     public Film update(@Valid @RequestBody Film newFilm) {
         if (newFilm.getId() == null) {
@@ -72,20 +77,9 @@ public class FilmController {
                 film.getDescription(),
                 film.getDuration(),
                 film.getReleaseDate());
-        if (film.getName() == null || film.getName().isBlank()) {
-            throw new ValidationException("Название фильма не может быть пустым");
-        }
-
-        if (film.getDescription().length() > 200) {
-            throw new ValidationException("Максимальная длина описания фильма — 200 символов");
-        }
 
         if (film.getReleaseDate().isBefore(MIN_VALID_DATE_FILM)) {
             throw new ValidationException("Дата релиза фильма должна быть — не раньше 28 декабря 1895 года");
-        }
-
-        if (film.getDuration() <= 0) {
-            throw new ValidationException("Продолжительность фильма должна быть положительным числом.");
         }
     }
 }
