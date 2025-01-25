@@ -8,7 +8,6 @@ import ru.yandex.practicum.filmorate.model.User;
 import ru.yandex.practicum.filmorate.storage.InMemoryUserStorage;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -16,7 +15,7 @@ import java.util.stream.Collectors;
 public class UserService {
 
     private final InMemoryUserStorage inMemoryUserStorage;
-    private final AtomicLong idGenerator = new AtomicLong(0); // Для автоинкремента
+    private long idGenerator = 1L;
 
     public UserService(InMemoryUserStorage inMemoryUserStorage) {
         this.inMemoryUserStorage = inMemoryUserStorage;
@@ -28,7 +27,7 @@ public class UserService {
 
     public User create(User user) {
         validationUser(user);
-        long newId = idGenerator.incrementAndGet();
+        long newId = idGenerator++;
         user.setId(newId);
         setName(user);
         inMemoryUserStorage.put(newId, user);
@@ -36,10 +35,7 @@ public class UserService {
     }
 
     public User update(User newUser) {
-        if (!inMemoryUserStorage.containsById(newUser.getId())) {
-            throw new NotFoundException("Пользователь с id = " + newUser.getId() + " не найден");
-        }
-
+        validateUserExists(newUser.getId());
         User oldUser = inMemoryUserStorage.get(newUser.getId());
         validationUser(newUser);
         oldUser.setEmail(newUser.getEmail());
@@ -51,21 +47,13 @@ public class UserService {
     }
 
     public User getUserById(Long id) {
-        return inMemoryUserStorage.getUsers()
-                .stream()
-                .filter(it -> Objects.equals(it.getId(), id))
-                .findFirst()
-                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
+        validateUserExists(id);
+        return inMemoryUserStorage.get(id);
     }
 
     public User addFriend(long id, long friendId) {
-        if (!inMemoryUserStorage.containsById(id)) {
-            throw new NotFoundException("Пользователь с " + id + "не найден");
-        }
-
-        if (!inMemoryUserStorage.containsById(friendId)) {
-            throw new NotFoundException("Пользователь с " + friendId + "не найден");
-        }
+        validateUserExists(id);
+        validateUserExists(friendId);
 
         User user1 = inMemoryUserStorage.get(id);
         User user2 = inMemoryUserStorage.get(friendId);
@@ -78,27 +66,17 @@ public class UserService {
     }
 
     public List<User> getUserFriends(long id) {
-        if (!inMemoryUserStorage.containsById(id)) {
-            throw new NotFoundException("Пользователь с id = " + id + " не найден");
-        }
+        validateUserExists(id);
 
         User user = inMemoryUserStorage.get(id);
+        Set<Long> friendIds = user.getFriends();
 
-        return user.getFriends()
-                .stream()
-                .map(inMemoryUserStorage::get)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
+        return inMemoryUserStorage.getUsersByIds(friendIds);
     }
 
     public List<User> getCommonFriends(long id, long otherId) {
-        if (!inMemoryUserStorage.containsById(id)) {
-            throw new NotFoundException("Пользователь с id = " + id + " не найден");
-        }
-
-        if (!inMemoryUserStorage.containsById(otherId)) {
-            throw new NotFoundException("Пользователь с " + otherId + "не найден");
-        }
+        validateUserExists(id);
+        validateUserExists(otherId);
 
         User user1 = inMemoryUserStorage.get(id);
         User user2 = inMemoryUserStorage.get(otherId);
@@ -115,13 +93,8 @@ public class UserService {
     }
 
     public void removeFriend(long id, long friendId) {
-        if (!inMemoryUserStorage.containsById(id)) {
-            throw new NotFoundException("Пользователь с " + id + "не найден");
-        }
-
-        if (!inMemoryUserStorage.containsById(friendId)) {
-            throw new NotFoundException("Пользователь с " + friendId + "не найден");
-        }
+        validateUserExists(id);
+        validateUserExists(friendId);
 
         User user1 = inMemoryUserStorage.get(id);
         User user2 = inMemoryUserStorage.get(friendId);
@@ -130,6 +103,11 @@ public class UserService {
         user2.getFriends().remove(id);
     }
 
+    public void validateUserExists(long id) {
+        if (!inMemoryUserStorage.containsById(id)) {
+            throw new NotFoundException("Пользователь с id = " + id + " не найден");
+        }
+    }
 
     private void validationUser(User user) {
         log.debug("Параметры нового пользователя. Электронная почта : {}," +
@@ -152,4 +130,6 @@ public class UserService {
             user.setName(user.getLogin());
         }
     }
+
+
 }

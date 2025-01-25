@@ -10,7 +10,6 @@ import ru.yandex.practicum.filmorate.storage.InMemoryUserStorage;
 
 import java.time.LocalDate;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -18,12 +17,14 @@ import java.util.stream.Collectors;
 public class FilmService {
     private final InMemoryFilmStorage inMemoryFilmStorage;
     private final InMemoryUserStorage inMemoryUserStorage;
-    private final AtomicLong idGenerator = new AtomicLong(0); // Для автоинкремента
+    private final UserService userService;
+    private long idGenerator = 1L;
     private static final LocalDate MIN_VALID_DATE_FILM = LocalDate.of(1895, 12, 28);
 
-    public FilmService(InMemoryFilmStorage inMemoryFilmStorage, InMemoryUserStorage inMemoryUserStorage) {
+    public FilmService(InMemoryFilmStorage inMemoryFilmStorage, InMemoryUserStorage inMemoryUserStorage, UserService userService) {
         this.inMemoryFilmStorage = inMemoryFilmStorage;
         this.inMemoryUserStorage = inMemoryUserStorage;
+        this.userService = userService;
     }
 
     public Collection<Film> findAll() {
@@ -32,38 +33,28 @@ public class FilmService {
 
     public Film create(Film film) {
         validationFilm(film);
-        long newId = idGenerator.incrementAndGet();
+        long newId = idGenerator++;
         film.setId(newId);
         inMemoryFilmStorage.put(newId, film);
         return film;
     }
 
     public Film update(Film newFilm) {
-        if (newFilm.getId() == null) {
-            throw new ValidationException("Id должен быть указан");
-        }
+        validateFilmExists(newFilm.getId());
 
-        if (inMemoryFilmStorage.containsById(newFilm.getId())) {
-            Film oldFilm = inMemoryFilmStorage.get(newFilm.getId());
-            validationFilm(newFilm);
-            oldFilm.setName(newFilm.getName());
-            oldFilm.setDescription(newFilm.getDescription());
-            oldFilm.setReleaseDate(newFilm.getReleaseDate());
-            oldFilm.setDuration(newFilm.getDuration());
-            return newFilm;
-        }
+        Film oldFilm = inMemoryFilmStorage.get(newFilm.getId());
+        validationFilm(newFilm);
+        oldFilm.setName(newFilm.getName());
+        oldFilm.setDescription(newFilm.getDescription());
+        oldFilm.setReleaseDate(newFilm.getReleaseDate());
+        oldFilm.setDuration(newFilm.getDuration());
+        return newFilm;
 
-        throw new NotFoundException("Фильм с id = " + newFilm.getId() + " не найден");
     }
 
     public Film addLike(long id, long userId) {
-        if (!inMemoryFilmStorage.containsById(id)) {
-            throw new NotFoundException("Фильм с id = " + id + " не найден");
-        }
-
-        if (!inMemoryUserStorage.containsById(userId)) {
-            throw new NotFoundException("Пользователь с id = " + id + " не найден");
-        }
+        validateFilmExists(id);
+        userService.validateUserExists(userId);
 
         Film film = inMemoryFilmStorage.get(id);
         film.getLikes().add(userId);
@@ -71,13 +62,8 @@ public class FilmService {
     }
 
     public Film removeLike(long id, long userId) {
-        if (!inMemoryFilmStorage.containsById(id)) {
-            throw new NotFoundException("Фильм с id = " + id + " не найден");
-        }
-
-        if (!inMemoryUserStorage.containsById(userId)) {
-            throw new NotFoundException("Пользователь с id = " + id + " не найден");
-        }
+        validateFilmExists(id);
+        userService.validateUserExists(userId);
 
         Film film = inMemoryFilmStorage.get(id);
         film.getLikes().remove(userId);
@@ -90,6 +76,12 @@ public class FilmService {
                 .sorted((film1, film2) -> Integer.compare(film2.getLikes().size(), film1.getLikes().size()))
                 .limit(count)
                 .collect(Collectors.toList());
+    }
+
+    public void validateFilmExists(long id) {
+        if (!inMemoryFilmStorage.containsById(id)) {
+            throw new NotFoundException("Фильм с id = " + id + " не найден");
+        }
     }
 
     private void validationFilm(Film film) {
